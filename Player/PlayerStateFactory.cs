@@ -7,7 +7,9 @@ public enum PlayerStates
     moving,
     jumping,
     falling,
-    pushing
+    pushing,
+    pushKickCharge,
+    pushKickRelease
 }
 public class PlayerStateFactory
 {
@@ -23,6 +25,8 @@ public class PlayerStateFactory
         states[PlayerStates.jumping] = new PlayerJumpState(context, this);
         states[PlayerStates.falling] = new PlayerFallState(context, this);
         states[PlayerStates.pushing] = new PlayerPushState(context, this);
+        states[PlayerStates.pushKickCharge] = new PlayerPushKickChargeState(context, this);
+        states[PlayerStates.pushKickRelease] = new PlayerPushKickReleaseState(context, this);
     }
 
     public PlayerBaseState Grounded()
@@ -55,5 +59,13 @@ public class PlayerStateFactory
         return states[PlayerStates.pushing];
     }
 
-    
+    public PlayerBaseState PushKickCharge()
+    {
+        return states[PlayerStates.pushKickCharge];
+    }
+
+    public PlayerBaseState PushKickRelease()
+    {
+        return states[PlayerStates.pushKickRelease];
+    }
 }

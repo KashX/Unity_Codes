@@ -41,9 +41,10 @@ public class PlayerGroundState : PlayerBaseState
 
     public override void InitializeSubState()
     {
-        if(Ctx.IsReadyToPush)
+        if(Ctx.ReadyToPush && Ctx.IsPushKick)
         {
-            SetSubState(Factory.Push());
+            Debug.Log("isReady to push");
+            SetSubState(Factory.PushKickCharge());
         }
         else if(!Ctx.IsMovementPressed)
         {

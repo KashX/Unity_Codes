@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Animations.Rigging;
 
 public class PlayerStateMachine : MonoBehaviour
 {
@@ -11,17 +12,21 @@ public class PlayerStateMachine : MonoBehaviour
     //_____________...getter and setter..._______________________________________________________________________________________
     public PlayerBaseState CurrentState {get {return currentState;} set {currentState = value;}}
 
+    public PushObjCollectData PushScript {get {return pushScript;}}
     public Animator Animator {get {return animator;}}
     public CharacterController CharacterController {get {return characterController;}}
     public bool IsJumpPressed {get {return isJumpPressed;}}
     public int IsJumpingHash {get {return isJumpingHash;}}
     public int IsMovingHash {get {return isMovingHash;}}
+    public int IsPushKickChargeHash {get {return isPushKickChargeHash;}}
+    public int IsPushKickReleaseHash {get {return isPushKickReleaseHash;}}
     public Vector2 CurrentMovementInput {get {return currentMovementInput;}}
     public float CurrentMovementY {get {return currentMovement.y;} set{currentMovement.y = value;}}
     public float AppliedMovementY {get {return appliedMovement.y;} set{appliedMovement.y = value;}}
     public float AppliedMovementX {get {return appliedMovement.x;} set{appliedMovement.x = value;}}
     public float AppliedMovementZ {get {return appliedMovement.z;} set{appliedMovement.z = value;}}
     public bool IsMovementPressed {get {return isMovementPressed;}}
+    public float MoveSpeed {get {return moveSpeed;} set {moveSpeed = value;}}
     public bool RequireNewJumpPress {get {return requireNewJumpPress;} set {requireNewJumpPress = value;}}
     public bool IsJumping {set {isJumping = value;}}
     public float InitialJumpVelocity {get {return initialJumpVelocity;}}
@@ -29,20 +34,29 @@ public class PlayerStateMachine : MonoBehaviour
     public float JumpGravity {get {return jumpGravity;} set {jumpGravity = value;}}
 
     public bool IsHold {get {return isHold;}}
-    public bool IsReadyToPush {get {return isReadyToPush;}}
+    public bool IsPushKick {get {return isPushkick;}}
     public GameObject PushableObject {get {return pushableObject;} set {pushableObject = value;}}
-    public GameObject PlayerObj {get {return playerObj;}}
     public Rigidbody RB {get {return rb;} set {rb = value;}}
+    // .........for animations............
+    public TwoBoneIKConstraint LeftHandIK {get {return leftHandIK;}}
+    public TwoBoneIKConstraint RightHandIK {get {return rightHandIK;}}
+    public Transform PushPosition {get {return pushPosition;}}
+    public Transform PlayerTransform {get {return playerTransform;}}
+    public bool ReadyToPush {get {return _readyToPush;} set {_readyToPush = value;}}
+    public float Timer {get {return _timer;} set {_timer = value;}}
 
 
     //_____________...All Variables needed..._____________________________________________________________________________________
     private Player playerInput;
     private CharacterController characterController;
     private Animator animator;
+    [SerializeField] private PushObjCollectData pushScript;
 
     //Variables to store optimized Animation setter/getter IDs
     int isMovingHash;
     int isJumpingHash;
+    int isPushKickChargeHash;
+    int isPushKickReleaseHash;
 
     //Variables to store player input values
     private Vector2 currentMovementInput;
@@ -61,15 +75,24 @@ public class PlayerStateMachine : MonoBehaviour
     private bool isJumping = false;
     private bool requireNewJumpPress = false;
 
-    private Vector3 directionToPush;
     private bool isHold = false;
-    private bool isReadyToPush = false;
     private GameObject pushableObject;
-    [SerializeField] private GameObject playerObj;
     private Rigidbody rb;
+
+    private bool isPushkick;
+    private float _timer;
+
+    // <.................................Animations...............................>
+    private TwoBoneIKConstraint leftHandIK;
+    private TwoBoneIKConstraint rightHandIK;
+    private Transform pushPosition;
+    private Transform playerTransform;
+    [SerializeField] private bool _readyToPush;
+
 
     private void Awake()
     {
+        playerTransform = this.transform;
         playerInput = new Player();
         characterController = GetComponent<CharacterController>();
         animator = GetComponentInChildren<Animator>();
@@ -77,6 +100,8 @@ public class PlayerStateMachine : MonoBehaviour
         //
         isMovingHash = Animator.StringToHash("isMoving");
         isJumpingHash = Animator.StringToHash("isJumping");
+        isPushKickChargeHash = Animator.StringToHash("isPushKickCharging");
+        isPushKickReleaseHash = Animator.StringToHash("isPushKickReleasing");
 
         //set player input callbacks
         playerInput.PlayerMain.Move.started += OnMovementInput;
@@ -86,6 +111,8 @@ public class PlayerStateMachine : MonoBehaviour
         playerInput.PlayerMain.Jump.canceled += OnJump;
         playerInput.PlayerMain.Hold.started += OnHold;
         playerInput.PlayerMain.Hold.canceled += OnHold;
+        playerInput.PlayerMain.PushKick.started += OnPushKick;
+        playerInput.PlayerMain.PushKick.canceled += OnPushKick;
 
         SetUpJumpVariables();
 
@@ -108,6 +135,12 @@ public class PlayerStateMachine : MonoBehaviour
         characterController.Move(appliedMovement * moveSpeed * Time.deltaTime);
     }
 
+    private void FixedUpdate()
+    {
+        
+    }
+
+    //<......................................Setting up Control Variables...................................................................>
     private void SetUpJumpVariables()
     {
         float timeToApex = maxJumpTime / 2;
@@ -135,6 +168,12 @@ public class PlayerStateMachine : MonoBehaviour
         isHold = context.ReadValueAsButton();
     }
 
+    private void OnPushKick(InputAction.CallbackContext context)
+    {
+        isPushkick = context.ReadValueAsButton();
+    }
+
+    //<....................................Handle Movements and Rotations..............................................................>
     private void HandleRotation()
     {
         Vector3 positionToLookAt;
@@ -144,39 +183,21 @@ public class PlayerStateMachine : MonoBehaviour
 
         Quaternion currentRotation = transform.rotation;
 
-        if(isMovementPressed && !isHold)
+        if(isMovementPressed && !isHold && !isPushkick)
         {
             Quaternion targetRotation = Quaternion.LookRotation(positionToLookAt);
             transform.rotation = Quaternion.Slerp(currentRotation, targetRotation, rotationFactor*Time.deltaTime);
         }
     }
 
-    private void OnTriggerEnter(Collider col)
+    private void OnControllerColliderHit(ControllerColliderHit hit)
     {
-        if(col.tag == "ObjectToPush")
+        if(hit.gameObject.CompareTag("ObjectToPush"))
         {
-            isReadyToPush = true;
-            pushableObject = col.gameObject.transform.root.gameObject;
-            rb = col.gameObject.GetComponent<Rigidbody>();
-            
-            //col.transform.parent = gameObject.transform;
+            rb = hit.collider.attachedRigidbody;
+            pushScript = hit.gameObject.GetComponent<PushObjCollectData>();
+            _readyToPush = pushScript.CanPush;
         }
-        else
-        {
-            isReadyToPush = false;
-        }
-    }
-
-    private void OnTriggerExit(Collider col)
-    {
-        if(col.tag == "Ground" || col.tag == "ObjectToPush")
-        {
-            isReadyToPush = false;
-        }
-    }
-
-    private void HandlePushing()
-    {
         
     }
 

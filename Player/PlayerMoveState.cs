@@ -30,14 +30,14 @@ public class PlayerMoveState : PlayerBaseState
 
     public override void CheckSwitchStates()
     {
-        if(!Ctx.IsMovementPressed && !Ctx.IsHold)
+        if(!Ctx.IsMovementPressed && !Ctx.IsPushKick)
         {
             SwitchStates(Factory.Idle());
         }
 
-        if(Ctx.IsReadyToPush && Ctx.IsHold)
+        if(Ctx.ReadyToPush && Ctx.IsPushKick)
         {
-            SwitchStates(Factory.Push());
+            SwitchStates(Factory.PushKickCharge());
         }
     }
 
